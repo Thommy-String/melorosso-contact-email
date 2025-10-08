@@ -1,100 +1,157 @@
+// server.js
 import express from 'express';
 import cors from 'cors';
 import nodemailer from 'nodemailer';
 import 'dotenv/config';
 
 const app = express();
+const PORT = process.env.PORT || 3001;
 
-// CORS: in produzione limita ai tuoi domini
-app.use(cors({ origin: ['https://melorosso.it', 'https://www.melorosso.it', 'http://localhost:5173'], methods: ['POST', 'OPTIONS'] }));
+/* =========================
+ * Middleware
+ * ========================= */
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'https://melorosso.it',
+    'https://www.melorosso.it',
+  ],
+  methods: ['POST', 'OPTIONS'],
+}));
 app.use(express.json({ limit: '512kb' }));
 
-/**
- * ===========================
- * SMTP CONFIG — STARTTLS (587)
- * ===========================
- * Render e altri PaaS spesso bloccano la 465 (SSL diretto).
- * Usiamo 587 con STARTTLS: secure=false + requireTLS=true.
- */
-const PORT_NUM = Number(process.env.SMTP_PORT || 587); // default 587
-const SECURE = false; // 587 => STARTTLS (non SSL diretto)
-
+/* =========================
+ * Nodemailer - SMTP semplice (come versione “funzionava”)
+ * - secure: true se 465, altrimenti false
+ * - niente pool, niente requireTLS/timeout extra
+ * ========================= */
+const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const transport = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,             // es: smtp.aruba.it
-  port: PORT_NUM,                          // 587
-  secure: SECURE,                          // false = STARTTLS
+  host: process.env.SMTP_HOST,           // es: smtps.aruba.it o smtp.aruba.it
+  port: SMTP_PORT,                       // 465 (SSL) o 587
+  secure: SMTP_PORT === 465,             // true solo su 465
   auth: {
-    user: process.env.SMTP_USER,           // es: mailer@melorosso.it
-    pass: process.env.MAILER_PASS,         // password casella (dal tuo .env)
+    user: process.env.SMTP_USER,         // es: mailer@melorosso.it
+    pass: process.env.MAILER_PASS,       // password casella
   },
-  requireTLS: true,                        // forza l'upgrade TLS su 587
-  pool: true,
-  maxConnections: 3,
-  maxMessages: 100,
-  // timeouts per evitare pendings
-  connectionTimeout: 15000,
-  greetingTimeout: 10000,
-  socketTimeout: 20000,
-  logger: true,
-  debug: false,
 });
 
-// Verifica connessione SMTP all’avvio
-transport.verify()
-  .then(() => console.log(`✅ SMTP pronto: ${process.env.SMTP_HOST}:${PORT_NUM} secure=${SECURE} (STARTTLS)`))
-  .catch(err => console.error('❌ SMTP verify error:', err?.code || err?.message || err));
-
-// Mittente (fallback alla casella SMTP se FROM_EMAIL non è definita)
-const FROM_EMAIL = process.env.FROM_EMAIL || process.env.SMTP_USER || 'no-reply@localhost';
+const FROM_EMAIL = process.env.FROM_EMAIL || process.env.SMTP_USER;
 const FROM_NAME  = process.env.FROM_NAME  || 'Melorosso';
 
-app.post('/api/request-demo', async (req, res) => {
-  const { siteUrl, source } = req.body;
+/* =========================
+ * Endpoint: /api/contact
+ * (form completo: name, company, website, email, message, plan)
+ * ========================= */
+app.post('/api/contact', async (req, res) => {
+  const { name, company, website, email, message, plan } = req.body || {};
 
-  // Validazione semplice
-  if (!siteUrl || typeof siteUrl !== 'string') {
-    return res.status(400).json({ error: 'Il sito web è obbligatorio.' });
+  // Validazione base
+  if (!name || !email || !company) {
+    return res.status(400).json({ error: 'Nome, email e nome azienda sono obbligatori.' });
   }
-
-  // Normalizza URL per i link cliccabili
-  const url = siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`;
 
   const mailOptions = {
     from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
     to: 'info@melorosso.it',
-    replyTo: 'info@melorosso.it',
-    subject: `🚀 Nuova richiesta demo per: ${siteUrl}`,
-    text: `Nuova Richiesta Demo AI
-Sito: ${siteUrl}
-Fonte: ${source || 'Non specificata'}`,
+    replyTo: email, // rispondi direttamente al cliente
+    subject: `Nuova richiesta dal sito • Piano: ${plan || 'Non specificato'}`,
+    text:
+`Nuova Richiesta di Contatto
+Piano: ${plan || 'Non specificato'}
+Nome: ${name}
+Email: ${email}
+Azienda: ${company}
+Sito: ${website || 'Non fornito'}
+
+Messaggio:
+${message || 'Nessun messaggio.'}
+`,
     html: `
-      <div style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6;">
-        <h2 style="color:#333;">🚀 Nuova Richiesta Demo AI</h2>
-        <p><strong>Sito:</strong> <a href="${url}" target="_blank" rel="noopener noreferrer">${siteUrl}</a></p>
-        <p><strong>Fonte:</strong> ${source || 'Non specificata'}</p>
-        <hr/>
-        <p style="font-size:12px;color:#666">Inviato automaticamente dal widget "Request Demo".</p>
+      <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.6;">
+        <h2 style="margin:0 0 8px;color:#222;">Nuova Richiesta di Contatto</h2>
+        <p><strong>Piano:</strong> ${plan || 'Non specificato'}</p>
+        <hr style="border:none;border-top:1px solid #eee;margin:12px 0;" />
+        <p><strong>Nome:</strong> ${name}</p>
+        <p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
+        <p><strong>Azienda:</strong> ${company}</p>
+        <p><strong>Sito:</strong> ${
+          website
+            ? `<a href="${website}" target="_blank" rel="noopener noreferrer">${website}</a>`
+            : 'Non fornito'
+        }</p>
+        <p><strong>Messaggio:</strong></p>
+        <div style="background:#f7f7f7;padding:12px;border-radius:6px;white-space:pre-wrap;">
+          ${message || 'Nessun messaggio.'}
+        </div>
       </div>
     `,
-    envelope: {
-      from: FROM_EMAIL,
-      to: ['info@melorosso.it'],
-    },
   };
 
   try {
-    const info = await transport.sendMail(mailOptions);
-    console.log('📨 SMTP OK messageId:', info?.messageId);
-    return res.status(200).json({ message: 'Richiesta inviata con successo!' });
+    await transport.sendMail(mailOptions);
+    console.log('📨 /api/contact OK da:', email);
+    return res.status(200).json({ message: 'Messaggio inviato con successo!' });
   } catch (error) {
-    console.error('❌ Errore SMTP:', { code: error?.code, command: error?.command, message: error?.message });
-    return res.status(500).json({ error: 'Errore durante l’invio della richiesta.' });
+    console.error('❌ /api/contact errore:', error);
+    return res.status(500).json({ error: 'Si è verificato un errore durante l’invio del messaggio.' });
   }
 });
 
-// Health-check
+/* =========================
+ * Endpoint: /api/request-demo
+ * (usato da RequestDemoWidget.tsx — riceve solo siteUrl, source)
+ * ========================= */
+app.post('/api/request-demo', async (req, res) => {
+  const { siteUrl, source } = req.body || {};
+
+  if (!siteUrl || typeof siteUrl !== 'string') {
+    return res.status(400).json({ error: 'Il sito web è obbligatorio.' });
+    }
+
+  const normalizedUrl = siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`;
+
+  const mailOptions = {
+    from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+    to: 'info@melorosso.it',
+    subject: `🚀 Nuova Richiesta Demo AI per: ${siteUrl}`,
+    text:
+`Nuova Richiesta Demo AI
+Sito: ${siteUrl}
+Fonte: ${source || 'Non specificata'}
+`,
+    html: `
+      <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.6;">
+        <h2 style="margin:0 0 8px;color:#222;">🚀 Nuova Richiesta Demo AI</h2>
+        <p>Richiesta per il seguente sito:</p>
+        <p style="background:#f7f7f7;padding:12px;border-radius:6px;font-size:18px;margin:8px 0;">
+          <strong><a href="${normalizedUrl}" target="_blank" rel="noopener noreferrer">${siteUrl}</a></strong>
+        </p>
+        <p><strong>Fonte:</strong> ${source || 'Non specificata'}</p>
+        <hr style="border:none;border-top:1px solid #eee;margin:12px 0;" />
+        <p style="font-size:12px;color:#777;">Inviato automaticamente dal widget “Request Demo”.</p>
+      </div>
+    `,
+  };
+
+  try {
+    await transport.sendMail(mailOptions);
+    console.log('📨 /api/request-demo OK per:', siteUrl);
+    return res.status(200).json({ message: 'Richiesta inviata con successo!' });
+  } catch (error) {
+    console.error('❌ /api/request-demo errore:', error);
+    return res.status(500).json({ error: 'Si è verificato un errore durante l’invio della richiesta.' });
+  }
+});
+
+/* =========================
+ * Health-check
+ * ========================= */
 app.get('/health', (_, res) => res.status(200).send('ok'));
 
-app.listen(process.env.PORT || 3001, () => {
-  console.log(`Server in ascolto 🚀 sulla porta ${process.env.PORT || 3001}`);
+/* =========================
+ * Avvio server
+ * ========================= */
+app.listen(PORT, () => {
+  console.log(`Server in ascolto sulla porta ${PORT}`);
 });
