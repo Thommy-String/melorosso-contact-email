@@ -15,8 +15,10 @@ app.use(cors({
     'http://localhost:5173',
     'https://melorosso.it',
     'https://www.melorosso.it',
+    /\.onrender\.com$/ // consente anche il tuo dominio Render
   ],
   methods: ['POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
 }));
 app.use(express.json({ limit: '512kb' }));
 
