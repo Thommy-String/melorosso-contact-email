@@ -6,7 +6,7 @@ import 'dotenv/config';
 const app = express();
 
 // CORS: in produzione limita ai tuoi domini
-app.use(cors({ origin: ['https://melorosso.it', 'https://www.melorosso.it'], methods: ['POST', 'OPTIONS'] }));
+app.use(cors({ origin: ['https://melorosso.it', 'https://www.melorosso.it', 'http://localhost:5173'], methods: ['POST', 'OPTIONS'] }));
 app.use(express.json({ limit: '512kb' }));
 
 /**
