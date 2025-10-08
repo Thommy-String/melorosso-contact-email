@@ -21,7 +21,7 @@ const transport = nodemailer.createTransport({
   },
 });
 
-// Endpoint per ricevere i dati del form e inviare l'email
+// Endpoint ESISTENTE per il form di contatto completo
 app.post('/api/contact', async (req, res) => {
   const { name, company, website, email, message, plan } = req.body;
 
@@ -62,6 +62,48 @@ app.post('/api/contact', async (req, res) => {
     res.status(500).json({ error: "Si è verificato un errore durante l'invio del messaggio." });
   }
 });
+
+
+// ====================================================================
+// NUOVO ENDPOINT PER LA RICHIESTA DELLA DEMO (SOLO SITO WEB)
+// ====================================================================
+app.post('/api/request-demo', async (req, res) => {
+  // Riceviamo solo i dati che ci servono da questo form
+  const { siteUrl, source } = req.body;
+
+  // Validazione: assicuriamoci che il sito sia stato inviato
+  if (!siteUrl) {
+    return res.status(400).json({ error: 'Il sito web è obbligatorio.' });
+  }
+
+  // Contenuto dell'email (molto più semplice)
+  const mailOptions = {
+    from: `"${process.env.FROM_NAME}" <${process.env.FROM_EMAIL}>`,
+    to: 'info@melorosso.it', // L'email a cui inviare la notifica
+    subject: `🚀 Nuova Richiesta Demo AI per: ${siteUrl}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6;">
+        <h2 style="color: #333;">🚀 Nuova Richiesta Demo AI</h2>
+        <p>È stata richiesta una nuova demo per il seguente sito web:</p>
+        <p style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; font-size: 18px;">
+          <strong><a href="${siteUrl}" target="_blank">${siteUrl}</a></strong>
+        </p>
+        <p><strong>Fonte della richiesta:</strong> ${source || 'Non specificata'}</p>
+      </div>
+    `,
+  };
+
+  try {
+    // Invia l'email
+    await transport.sendMail(mailOptions);
+    console.log('Richiesta demo inviata con successo per:', siteUrl);
+    res.status(200).json({ message: 'Richiesta inviata con successo!' });
+  } catch (error) {
+    console.error("Errore durante l'invio della richiesta demo:", error);
+    res.status(500).json({ error: "Si è verificato un errore durante l'invio della richiesta." });
+  }
+});
+
 
 app.listen(PORT, () => {
   console.log(`Server in ascolto sulla porta ${PORT}`);
