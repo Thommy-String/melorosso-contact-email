@@ -127,16 +127,16 @@ Fonte: ${source || 'Non specificata'}`;
       text,
       html,
     }));
-    console.log('📨 /api/request-demo OK per:', siteUrl);
+    console.log('📨 /api.request-demo OK per:', siteUrl);
     return res.status(200).json({ message: 'Richiesta inviata con successo!' });
   } catch (err) {
-    console.error('❌ /api/request-demo errore:', err?.code || err?.message || err);
+    console.error('❌ /api.request-demo errore:', err?.code || err?.message || err);
     return res.status(500).json({ error: 'Si è verificato un errore durante l’invio della richiesta.' });
   }
 });
 
 /* =========================
- * /api/test-mail – debug consegna
+ * /api.test-mail – debug consegna
  * ========================= */
 app.post('/api/test-mail', async (_req, res) => {
   try {
@@ -166,8 +166,8 @@ app.post('/api/test-mail', async (_req, res) => {
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 /* =========================
- * Avvio
+ * Avvio server
  * ========================= */
 app.listen(PORT, () => {
-  console.log(`✅ Server up on port ${PORT}`);
+  console.log(`✅ Server up on port ${PORT}`);  
 });
